@@ -1,1 +1,32 @@
-{}
+{
+  "bbb73b79-f03d-428f-840c-4339f572e29b": {
+    "id": "bbb73b79-f03d-428f-840c-4339f572e29b",
+    "name": "Planner-Executor Architecture Explained",
+    "created_at": "2026-10-15T11:47:03.795144",
+    "is_named": true
+  },
+  "b09a6171-1019-469b-bbd2-3ba309a4c91c": {
+    "id": "b09a6171-1019-469b-bbd2-3ba309a4c91c",
+    "name": "Planner-Executor Architecture Explained",
+    "created_at": "2026-10-15T11:52:38.761172",
+    "is_named": true
+  },
+  "4d964854-31db-4d16-badd-924103efcb73": {
+    "id": "4d964854-31db-4d16-badd-924103efcb73",
+    "name": "German Federal Election Winner",
+    "created_at": "2026-10-15T11:53:36.127318",
+    "is_named": true
+  },
+  "dcb6165b-94bd-4f53-ae65-b4f16df79d7c": {
+    "id": "dcb6165b-94bd-4f53-ae65-b4f16df79d7c",
+    "name": "German Federal Election 2025",
+    "created_at": "2026-10-15T12:09:31.417887",
+    "is_named": true
+  },
+  "8dce5206-5bfb-4f02-b6c3-5ecf97d425a7": {
+    "id": "8dce5206-5bfb-4f02-b6c3-5ecf97d425a7",
+    "name": "Self-RAG Problem Solved",
+    "created_at": "2026-10-15T12:27:25.263931",
+    "is_named": true
+  }
+}

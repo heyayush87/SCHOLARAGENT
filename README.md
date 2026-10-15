@@ -208,12 +208,4 @@ uv run python evaluate.py
 
 ---
 
-## Credits
 
-SCHOLARAGENT is built on top of [Himanshu-1703/rag-papeer-project](https://github.com/Himanshu-1703/rag-papeer-project) — the original architecture (LangGraph RAG workflow, Qdrant session isolation, Streamlit UI, DeepEval pipeline) is his work.
-
-Changes made in this fork:
-- Replaced OpenAI with **Anthropic Claude** (`langchain-anthropic`) for all LLM calls and the DeepEval judge model
-- Replaced OpenAI embeddings with **Voyage AI** (`voyage-4`, 1024-dim)
-- Added **LangSmith** tracing (auto-enabled when `LANGSMITH_API_KEY` is set)
-- Centralised model configuration in `backend/llm.py`
