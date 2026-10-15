@@ -10,7 +10,6 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import InjectedToolCallId, tool
-from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
@@ -18,12 +17,13 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
+from backend.llm import get_llm, text_of
 from backend.models import ClaimVerificationResult, RelevancyDecision, RouterDecision
 from backend.vector_store import search as vs_search
 
 load_dotenv()
 
-llm = ChatOpenAI(model="gpt-5.4-mini")
+llm = get_llm()
 
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ ROUTER_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "{query}"),
 ])
 
-router_chain = ROUTER_PROMPT | llm.with_structured_output(RouterDecision)
+router_chain = ROUTER_PROMPT | llm.with_structured_output(RouterDecision, method="json_schema")
 
 
 def router_node(state: RAGState) -> dict:
@@ -103,7 +103,11 @@ def retrieve_from_vectorstore(
     docs = vs_search(query=query, session_id=session_id, k=k)
     if not docs:
         return [ToolMessage(content="No relevant documents found in the vector store.", tool_call_id=tool_call_id)]
-    summary = f"Retrieved {len(docs)} chunk(s) from the vector store."
+    summary = (
+        f"Retrieved {len(docs)} chunk(s) from the vector store. "
+        "The full content is saved in the context for answer generation. "
+        "Do not search again unless these results are clearly irrelevant."
+    )
     return [
         ToolMessage(content=summary, tool_call_id=tool_call_id),
         Command(update={"retrieved_docs": (current_docs or []) + docs}),
@@ -129,7 +133,12 @@ def web_search(
         )
         for r in results["results"]
     ]
-    summary = f"Found {len(web_docs)} web result(s) for: {optimized_query}"
+    titles = "\n".join(f"- {d.metadata['title']}" for d in web_docs)
+    summary = (
+        f"Found {len(web_docs)} web result(s) for: {optimized_query}\n{titles}\n"
+        "The full content is saved in the context for answer generation. "
+        "Do not search again unless these results are clearly irrelevant."
+    )
     return [
         ToolMessage(content=summary, tool_call_id=tool_call_id),
         Command(update={"retrieved_docs": (current_docs or []) + web_docs}),
@@ -172,7 +181,7 @@ RELEVANCY_CHECK_SYSTEM = (
     "no useful information.\n\nBe lenient: if there is any substantive overlap, return true."
 )
 
-relevancy_llm = llm.with_structured_output(RelevancyDecision)
+relevancy_llm = llm.with_structured_output(RelevancyDecision, method="json_schema")
 
 QUERY_REWRITE_SYSTEM = (
     "You are a query rewriting assistant for a research paper retrieval system. "
@@ -194,9 +203,11 @@ def agent_node(state: RAGState) -> dict:
     lm = llm if current_attempts >= MAX_RETRIEVAL_ATTEMPTS else retrieval_llm
     messages = [{"role": "system", "content": RETRIEVE_SYSTEM}] + state["messages"]
     response = lm.invoke(messages)
-    updates: dict = {"messages": [response]}
     if getattr(response, "tool_calls", None):
-        updates["retrieval_attempts"] = current_attempts + 1
+        updates: dict = {"messages": [response], "retrieval_attempts": current_attempts + 1}
+    else:
+        # The agent only gathers context; drop any answer text it writes so it never reaches the chat history.
+        updates = {"messages": [AIMessage(content="Context gathered.")]}
     return updates
 
 
@@ -224,7 +235,7 @@ def query_rewrite_node(state: RAGState) -> dict:
         {"role": "system", "content": QUERY_REWRITE_SYSTEM},
         {"role": "user", "content": f"Original query: {original_query}\n\nWrite an improved search query."},
     ])
-    rewritten = response.content.strip()
+    rewritten = text_of(response.content).strip()
     return {
         "messages": [HumanMessage(content=rewritten)],
         "query": rewritten,
@@ -248,7 +259,7 @@ CLAIM_ANALYSIS_PROMPT = (
     "- verdict_summary should be 1-2 sentences suitable for display to the user."
 )
 
-verification_llm = llm.with_structured_output(ClaimVerificationResult)
+verification_llm = llm.with_structured_output(ClaimVerificationResult, method="json_schema")
 
 
 def verify_claim_node(state: RAGState) -> dict:
@@ -321,7 +332,7 @@ def generate_answer_node(state: RAGState) -> dict:
             else:
                 context = "\n\n---\n\n".join(doc.page_content for doc in docs)
                 prompt = f"Answer the question using this context:\n\n{context}\n\nQuestion: {query}"
-                answer = llm.invoke([{"role": "user", "content": prompt}]).content
+                answer = text_of(llm.invoke([{"role": "user", "content": prompt}]).content)
 
     elif route == "verify_claim":
         verdict = state.get("claim_verdict", "")
@@ -351,7 +362,7 @@ def generate_answer_node(state: RAGState) -> dict:
 
     else:  # direct_answer
         prompt = f"Answer from your knowledge.\n\nQuestion: {query}"
-        answer = llm.invoke([{"role": "user", "content": prompt}]).content
+        answer = text_of(llm.invoke([{"role": "user", "content": prompt}]).content)
 
     return {"answer": answer, "messages": [AIMessage(content=answer)]}
 

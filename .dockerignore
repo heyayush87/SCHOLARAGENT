@@ -19,3 +19,7 @@ CLAUDE.md
 .mypy_cache/
 .pytest_cache/
 graph.png
+sessions.json
+*.db-shm
+*.db-wal
+.env.example

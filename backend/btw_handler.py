@@ -3,14 +3,14 @@ from typing import Generator
 
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from tavily import TavilyClient
 
+from backend.llm import get_llm, text_of
 from backend.models import BtwRouteDecision
 
 load_dotenv()
 
-llm = ChatOpenAI(model="gpt-5-mini")
+llm = get_llm(fast=True)
 
 
 def handle_btw(query: str) -> Generator[str, None, None]:
@@ -21,7 +21,7 @@ def handle_btw(query: str) -> Generator[str, None, None]:
          "current prices, breaking news) or if your general knowledge is sufficient."),
         ("human", "{query}"),
     ])
-    decision = (route_prompt | llm.with_structured_output(BtwRouteDecision)).invoke({"query": query})
+    decision = (route_prompt | llm.with_structured_output(BtwRouteDecision, method="json_schema")).invoke({"query": query})
 
     if decision.needs_web_search:
         client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
@@ -42,5 +42,5 @@ def handle_btw(query: str) -> Generator[str, None, None]:
         ])
 
     for chunk in (answer_prompt | llm).stream({"query": query}):
-        if chunk.content:
-            yield chunk.content
+        if text_of(chunk.content):
+            yield text_of(chunk.content)

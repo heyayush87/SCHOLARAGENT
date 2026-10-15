@@ -1,23 +1,22 @@
-FROM python:3.12
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# ── Layer 1: install deps (cached until requirements.txt changes) ─────────────
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    USER_AGENT=scholaragent
 
-# ── Layer 2: backend package ───────────────────────────────────────────────────
+# ── Layer 1: install deps from the lockfile (cached until pyproject/uv.lock change) ──
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+# ── Layer 2: backend package and documents ────────────────────────────────────
 COPY backend/ backend/
-
-# ── Layer 3: documents ─────────────────────────────────────────────────────────
 COPY documents/ documents/
 
-# ── Layer 4: application files (change most often — last for cache efficiency) ─
-COPY app.py .
-COPY evaluate.py .
-COPY main.py .
-COPY goldens.json .
-COPY sessions.json .
+# ── Layer 3: application files (change most often — last for cache efficiency) ──
+COPY app.py evaluate.py main.py goldens.json ./
 
 EXPOSE 8501
 

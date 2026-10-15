@@ -5,9 +5,9 @@ from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
-from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessageChunk, HumanMessage
 
+from backend.llm import get_llm, text_of
 from backend.btw_handler import handle_btw
 from backend.paper_loader import load_arxiv, load_document, load_webpage
 from backend.rag_graph import build_graph
@@ -22,7 +22,7 @@ def get_graph():
 
 
 SESSIONS_FILE = Path("sessions.json")
-_rename_llm = ChatOpenAI(model="gpt-5-mini")
+_rename_llm = get_llm(fast=True)
 
 
 def load_sessions() -> dict:
@@ -76,7 +76,7 @@ def generate_session_name(first_message: str) -> str:
                 {"role": "user", "content": first_message[:500]},
             ]
         )
-        return response.content.strip()
+        return text_of(response.content).strip()
     except Exception:
         return "New Session"
 
@@ -114,7 +114,7 @@ def load_session_chats(session_id: str) -> list[dict]:
         turn = 0
         for msg in state.values.get("messages", []):
             type_name = type(msg).__name__
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            content = text_of(msg.content)
             if type_name == "HumanMessage":
                 chats.append({"role": "user", "content": content})
             elif type_name in ("AIMessage", "AIMessageChunk"):
@@ -370,10 +370,10 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
             for chunk, metadata in graph.stream(input_state, config, stream_mode="messages"):
                 if (
                     metadata.get("langgraph_node") == "generate_answer"
-                    and hasattr(chunk, "content")
-                    and chunk.content
+                    and isinstance(chunk, AIMessageChunk)  # skip the final full AIMessage, which would duplicate the streamed text
+                    and text_of(chunk.content)
                 ):
-                    response_text += chunk.content
+                    response_text += text_of(chunk.content)
                     placeholder.markdown(response_text + "▌")
 
             if not response_text:

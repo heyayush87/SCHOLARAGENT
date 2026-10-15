@@ -100,14 +100,18 @@ All keys are loaded from a `.env` file in the project root via `python-dotenv`.
 
 | Variable | Purpose | Where to Get It |
 |---|---|---|
-| `OPENAI_API_KEY` | LLM inference (`gpt-5-mini`) and embeddings (`text-embedding-3-small`) | [platform.openai.com](https://platform.openai.com) |
+| `ANTHROPIC_API_KEY` | LLM inference (Claude Sonnet 5.5 for the RAG graph, Claude Haiku 5.5 for side tasks) | [console.anthropic.com](https://console.anthropic.com) |
+| `VOYAGE_API_KEY` | Embeddings (`voyage-4`, 1024-dim) | [voyageai.com](https://www.voyageai.com) |
+| `LANGSMITH_API_KEY` | *(optional)* LangSmith tracing of every LangChain/LangGraph call | [smith.langchain.com](https://smith.langchain.com) |
 | `TAVILY_API_KEY` | Web search for current developments and claim verification | [tavily.com](https://tavily.com) |
 | `QDRANT_URL` | Qdrant Cloud endpoint for the vector store | [cloud.qdrant.io](https://cloud.qdrant.io) |
 | `QDRANT_API_KEY` | Authentication for Qdrant Cloud | [cloud.qdrant.io](https://cloud.qdrant.io) |
 
 `.env` file format:
 ```env
-OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+VOYAGE_API_KEY=pa-...
+LANGSMITH_API_KEY=lsv2_...   # optional; enables tracing (project: SCHOLARAGENT)
 TAVILY_API_KEY=tvly-...
 QDRANT_URL=https://your-cluster.qdrant.io
 QDRANT_API_KEY=your-qdrant-api-key
@@ -151,7 +155,7 @@ User Query
 
 | Optimization | Details |
 |---|---|
-| **Embedding cache** | `CacheBackedEmbeddings` writes to `./embedding_cache/` so identical text is never re-embedded across sessions — reduces OpenAI API calls and latency |
+| **Embedding cache** | `CacheBackedEmbeddings` writes to `./embedding_cache/` so identical text is never re-embedded across sessions — reduces Voyage API calls and latency |
 | **Session isolation** | Each session gets its own Qdrant collection (`scholaragent_{session_id}`) and a separate LangGraph SQLite checkpointer thread — prevents cross-session data leakage |
 | **Graph caching** | The LangGraph graph is built once with `@st.cache_resource` and reused across all Streamlit reruns |
 | **Streaming responses** | `graph.stream()` is used with message mode so responses appear token-by-token rather than waiting for the full generation |
@@ -199,3 +203,15 @@ uv run python evaluate.py
 - On first run, synthetic golden test cases are generated from `documents/Openclaw_Research_Report.pdf` and cached to `goldens.json`
 - Results are written to `eval_results.json` with per-test metric scores, pass/fail status, and failure reasons
 - Subsequent runs reuse cached goldens unless `goldens.json` is deleted
+
+---
+
+## Credits
+
+SCHOLARAGENT is built on top of [Himanshu-1703/rag-papeer-project](https://github.com/Himanshu-1703/rag-papeer-project) — the original architecture (LangGraph RAG workflow, Qdrant session isolation, Streamlit UI, DeepEval pipeline) is his work.
+
+Changes made in this fork:
+- Replaced OpenAI with **Anthropic Claude** (`langchain-anthropic`) for all LLM calls and the DeepEval judge model
+- Replaced OpenAI embeddings with **Voyage AI** (`voyage-4`, 1024-dim)
+- Added **LangSmith** tracing (auto-enabled when `LANGSMITH_API_KEY` is set)
+- Centralised model configuration in `backend/llm.py`

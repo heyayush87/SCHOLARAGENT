@@ -15,3 +15,6 @@ sessions.json
 *.sqlite
 *.db
 .cache/
+embedding_cache/
+*.db-shm
+*.db-wal
