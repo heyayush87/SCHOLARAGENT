@@ -289,18 +289,6 @@ with st.sidebar:
     else:
         st.caption("No documents loaded yet.")
 
-    # TEMPORARY: remove once the deployed Claude key issue is solved.
-    with st.expander("Diagnostics (temporary)"):
-        if st.button("Test Claude key", key="btn_diag"):
-            import os
-            _k = os.environ.get("ANTHROPIC_API_KEY", "")
-            st.write(f"Key seen by app: length {len(_k)}, starts '{_k[:7]}'")
-            try:
-                get_llm(fast=True).invoke("Say OK")
-                st.success("Claude call OK")
-            except Exception as e:
-                st.error(f"{type(e).__name__}: {str(getattr(e, 'message', e))[:300]}")
-
 # ── Page header ────────────────────────────────────────────────────────────────
 st.title("📚 SCHOLARAGENT — Research Paper Assistant")
 st.markdown(
