@@ -1,5 +1,7 @@
 # SCHOLARAGENT — Research Paper Assistant
 
+**🔗 Live demo: [https://scholaragent-ayush.streamlit.app/](https://scholaragent-ayush.streamlit.app/)**
+
 A conversational AI assistant for students and researchers to upload, explore, and verify academic papers through natural language chat.
 
 ---
