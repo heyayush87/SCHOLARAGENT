@@ -183,7 +183,7 @@ User Query
 
 | Constraint | Why |
 |---|---|
-| **Max 3 query rewrites** | The RAG graph caps query rewrites at 3 retries before falling back to a plain LLM answer. Without this cap, ambiguous or unanswerable queries would loop indefinitely, burning API tokens and blocking the user |
+| **One query rewrite, 3 tool calls per round** | If the retrieved chunks are graded irrelevant, the graph rewrites the query once and retries; if that also fails it returns a clear "couldn't find relevant information" message. Within each retrieval round the agent may make at most 3 tool calls. Without these caps, ambiguous or unanswerable queries would loop indefinitely, burning API tokens and blocking the user |
 | **Chunk size 1000 / overlap 200** | Balances retrieval precision (smaller = more focused) against context preservation across chunk boundaries. The 200-char overlap ensures sentences split across chunks are still retrievable |
 | **Tavily max 3 results for `/btw`** | Keeps the context window manageable for side-channel queries that are intentionally lightweight and unsaved |
 | **`/btw` exchanges not stored** | These are deliberately out-of-context questions. Storing them would pollute session history and confuse the LLM's understanding of the paper-focused conversation |

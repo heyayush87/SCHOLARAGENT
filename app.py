@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import tempfile
 import uuid
@@ -15,6 +16,7 @@ from backend.rag_graph import build_graph
 from backend.vector_store import add_paper, delete_session_papers, list_papers
 
 st.set_page_config(page_title="SCHOLARAGENT", page_icon="📚", layout="centered")
+logger = logging.getLogger("scholaragent")
 
 
 @st.dialog("⚠️ Demo limit reached")
@@ -27,6 +29,26 @@ def limit_dialog(provider: str, reason: str) -> None:
     )
     if st.button("Close"):
         st.rerun()
+
+
+@st.dialog("⚠️ Something went wrong")
+def error_dialog(detail: str) -> None:
+    st.write("Something went wrong while handling your request. Please try again in a moment.")
+    st.caption("If it keeps happening, the service behind the demo may be busy or temporarily unavailable.")
+    with st.expander("Technical details"):
+        st.code(detail)
+    if st.button("Close"):
+        st.rerun()
+
+
+def show_failure(e: Exception) -> None:
+    """Log the error, then open the named limit popup or, for anything else, the generic error popup."""
+    logger.exception("Request failed")
+    info = limit_info(e)
+    if info:
+        limit_dialog(*info)
+    else:
+        error_dialog(f"{type(e).__name__}: {str(e)[:300]}")
 
 
 @st.dialog("⚠️ Couldn't load that")
@@ -314,6 +336,12 @@ with st.sidebar:
                             tmp.write(f.read())
                             tmp_path = tmp.name
                         docs = load_document(tmp_path)
+                        if not docs:  # e.g. a scanned (image-only) PDF, an empty file
+                            report_problem(
+                                f"**{f.name}**: no readable text was found. If this is a scanned PDF, "
+                                "it needs OCR first (or upload a text-based version)."
+                            )
+                            continue
                         for doc in docs:
                             doc.metadata["title"] = Path(f.name).stem
                         add_paper(docs, active_sid)
@@ -371,6 +399,8 @@ with st.sidebar:
             with st.spinner("Loading from ArXiv…"):
                 try:
                     docs = load_arxiv(arxiv_title.strip())
+                    if not docs:
+                        raise ValueError("the downloaded PDF has no readable text")
                     add_paper(docs, active_sid)
                     loaded_title = docs[0].metadata.get("title") if docs else arxiv_title.strip()
                     st.success(f"Loaded: {loaded_title}")
@@ -439,11 +469,8 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
                         placeholder.markdown(response_text + "▌")
                     placeholder.markdown(response_text)
                 except Exception as e:
-                    info = limit_info(e)
-                    if not info:
-                        raise
                     placeholder.empty()
-                    limit_dialog(*info)
+                    show_failure(e)
             st.caption("Side channel — not saved to session history.")
 
     else:
@@ -505,13 +532,10 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
                 with st.expander(f"📊 Graph state · turn {current_turn}", expanded=False):
                     st.json(state_snapshot)
             except Exception as e:
-                info = limit_info(e)
-                if not info:
-                    raise
                 placeholder.empty()
                 st.session_state.chats[active_sid].pop()  # drop the unanswered question
                 st.session_state.turns[active_sid] -= 1
-                limit_dialog(*info)
+                show_failure(e)
                 st.stop()
 
         st.session_state.chats[active_sid].append(
