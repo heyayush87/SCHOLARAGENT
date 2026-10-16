@@ -28,6 +28,32 @@ def limit_dialog(provider: str, reason: str) -> None:
         st.rerun()
 
 
+@st.dialog("⚠️ Couldn't load that")
+def input_problem_dialog(problems: list[str]) -> None:
+    for problem in problems:
+        st.write(f"- {problem}")
+    if st.button("OK"):
+        st.rerun()
+
+
+def report_problem(message: str) -> None:
+    """Queue a message for the popup, shown on the next rerun (a rerun would close it otherwise)."""
+    st.session_state.setdefault("input_problems", []).append(message)
+
+
+def describe_load_error(e: Exception) -> str:
+    code = getattr(e, "code", None) or getattr(getattr(e, "response", None), "status_code", None)
+    if code == 404:
+        return "the page was not found (404)"
+    if code in (401, 403):
+        return f"access was denied ({code})"
+    if isinstance(e, TimeoutError) or "timed out" in str(e).lower():
+        return "the request timed out"
+    if "connection" in str(e).lower() or "name or service" in str(e).lower() or "getaddrinfo" in str(e).lower():
+        return "the address could not be reached"
+    return str(e)[:200] or type(e).__name__
+
+
 @st.cache_resource
 def get_graph():
     return build_graph()
@@ -232,13 +258,14 @@ with st.sidebar:
                         st.session_state[processed_key].add(f.name)
                         st.success(f"Added: {f.name}")
                     except Exception as e:
-                        st.error(f"Failed: {f.name} — {e}")
+                        report_problem(f"**{f.name}**: could not read this file ({describe_load_error(e)}). Is it a valid PDF, TXT or Markdown file?")
                     finally:
                         if tmp_path:
                             Path(tmp_path).unlink(missing_ok=True)
             st.rerun()
         else:
-            st.warning("No files selected.")
+            report_problem("No file selected. Choose at least one PDF, TXT or Markdown file first.")
+            st.rerun()
 
     # ── Section 2: Web URL loader ──────────────────────────────────────────────
     st.markdown("**Web Pages**")
@@ -254,15 +281,20 @@ with st.sidebar:
         if urls:
             with st.spinner("Loading web pages…"):
                 for url in urls:
+                    if not url.startswith(("http://", "https://")) or "." not in url:
+                        report_problem(f"**{url[:60]}** is not a valid URL. It should look like https://example.com/paper")
+                        continue
                     try:
                         docs = load_webpage(url)
+                        if not docs:
+                            raise ValueError("the page has no readable text")
                         add_paper(docs, active_sid)
                         st.success(f"Loaded: {url[:60]}")
                     except Exception as e:
-                        st.error(f"Failed: {url[:60]} — {e}")
-            st.rerun()
+                        report_problem(f"**{url[:60]}**: could not load this page ({describe_load_error(e)}).")
         else:
-            st.warning("Enter at least one URL.")
+            report_problem("No URL entered. Paste at least one URL, one per line.")
+        st.rerun()
 
     # ── Section 3: ArXiv loader ────────────────────────────────────────────────
     st.markdown("**ArXiv Papers**")
@@ -281,10 +313,10 @@ with st.sidebar:
                     loaded_title = docs[0].metadata.get("title") if docs else arxiv_title.strip()
                     st.success(f"Loaded: {loaded_title}")
                 except Exception as e:
-                    st.error(f"Failed: {e}")
-            st.rerun()
+                    report_problem(f"**{arxiv_title.strip()[:60]}**: could not load this ArXiv paper ({describe_load_error(e)}). Check the ID or title.")
         else:
-            st.warning("Enter a paper title or ArXiv ID.")
+            report_problem("No ArXiv ID or title entered. Try 1706.03762 or Attention Is All You Need.")
+        st.rerun()
 
     # ── Loaded Documents list ──────────────────────────────────────────────────
     st.divider()
@@ -300,6 +332,9 @@ with st.sidebar:
             st.markdown(f"- {title}")
     else:
         st.caption("No documents loaded yet.")
+
+if st.session_state.get("input_problems"):
+    input_problem_dialog(st.session_state.pop("input_problems"))
 
 # ── Page header ────────────────────────────────────────────────────────────────
 st.title("📚 SCHOLARAGENT — Research Paper Assistant")
