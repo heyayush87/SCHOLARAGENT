@@ -1,9 +1,9 @@
-"""Central model + tracing configuration (Anthropic for chat, Voyage AI for embeddings, LangSmith for tracing)."""
+"""Central model + tracing configuration (Anthropic for chat, local FastEmbed for embeddings, LangSmith for tracing)."""
 import os
 
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
-from langchain_voyageai import VoyageAIEmbeddings
+from langchain_community.embeddings import FastEmbedEmbeddings
 
 load_dotenv()
 
@@ -16,16 +16,16 @@ if os.getenv("LANGSMITH_API_KEY"):
 # ── Models ────────────────────────────────────────────────────────────────────
 MAIN_MODEL = os.getenv("ANTHROPIC_MAIN_MODEL", "claude-sonnet-5-5")   # RAG graph: routing, answering, verification
 FAST_MODEL = os.getenv("ANTHROPIC_FAST_MODEL", "claude-haiku-5-5")    # side tasks: /btw, session titles
-EMBEDDING_MODEL = os.getenv("VOYAGE_EMBEDDING_MODEL", "voyage-4")
-EMBEDDING_DIM = 1024  # voyage-4 (default dim; free first 200M tokens)
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")  # runs locally (ONNX): no API key, no per-use cost
+EMBEDDING_DIM = 384  # bge-small-en-v1.5
 
 
 def get_llm(fast: bool = False) -> ChatAnthropic:
     return ChatAnthropic(model=FAST_MODEL if fast else MAIN_MODEL, max_tokens=4096)
 
 
-def get_embeddings() -> VoyageAIEmbeddings:
-    return VoyageAIEmbeddings(model=EMBEDDING_MODEL)
+def get_embeddings() -> FastEmbedEmbeddings:
+    return FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
 
 
 def text_of(content) -> str:

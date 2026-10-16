@@ -22,7 +22,7 @@ embedding_file_store = LocalFileStore("./embedding_cache/")
 embeddings = CacheBackedEmbeddings.from_bytes_store(
     base_embeddings,
     embedding_file_store,
-    namespace=base_embeddings.model,
+    namespace=base_embeddings.model_name,
     query_embedding_cache=True,
     key_encoder="blake2b",
 )
@@ -37,7 +37,7 @@ qdrant_client = QdrantClient(
 # ── Collection ───────────────────────────────────────────────────────────────
 
 def get_collection_name(session_id: str) -> str:
-    return f"scholaragent_{session_id.replace('-', '_')}"
+    return f"scholaragent_bge_{session_id.replace('-', '_')}"
 
 
 def get_vectorstore(session_id: str) -> QdrantVectorStore:
