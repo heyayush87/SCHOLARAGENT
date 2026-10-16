@@ -18,3 +18,7 @@ sessions.json
 embedding_cache/
 *.db-shm
 *.db-wal
+
+# Local-only files
+docs/
+.deepeval/
