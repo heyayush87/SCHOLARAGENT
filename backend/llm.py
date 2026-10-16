@@ -9,7 +9,9 @@ load_dotenv()
 
 # ── LangSmith tracing ─────────────────────────────────────────────────────────
 # Enabled automatically when LANGSMITH_API_KEY is set; LangChain/LangGraph calls are traced with no code changes.
-if os.getenv("LANGSMITH_API_KEY"):
+_langsmith_key = os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGCHAIN_API_KEY")  # LANGCHAIN_* is the legacy name
+if _langsmith_key:
+    os.environ.setdefault("LANGSMITH_API_KEY", _langsmith_key)
     os.environ.setdefault("LANGSMITH_TRACING", "true")
     os.environ.setdefault("LANGSMITH_PROJECT", "SCHOLARAGENT")
 
