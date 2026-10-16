@@ -43,7 +43,7 @@ def load_markdown(file_path: str) -> list[Document]:
 
 
 def load_webpage(url: str) -> list[Document]:
-    docs = WebBaseLoader(url, requests_kwargs={"timeout": 30}).load()
+    docs = WebBaseLoader(url, requests_kwargs={"timeout": 30}, raise_for_status=True).load()
     title = (docs[0].metadata.get("title") or url) if docs else url
     return _stamp_title(_splitter.split_documents(docs), title)
 
