@@ -39,3 +39,23 @@ def text_of(content) -> str:
             if isinstance(b, str) or (isinstance(b, dict) and b.get("type", "text") == "text")
         )
     return str(content or "")
+
+
+_LIMIT_NAMES = {
+    "RateLimitError", "UsageLimitExceededError", "TavilyKeylessLimitError",
+    "AuthenticationError", "PermissionDeniedError", "InvalidAPIKeyError", "ForbiddenError",
+}
+_LIMIT_PHRASES = ("rate limit", "credit balance", "quota", "usage limit", "billing", "exceeds your plan")
+
+
+def is_limit_error(exc: BaseException) -> bool:
+    """True if exc (or anything in its cause chain) means an API budget/rate limit was hit or a key was rejected."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if type(exc).__name__ in _LIMIT_NAMES or getattr(exc, "status_code", None) in (402, 429):
+            return True
+        if any(p in str(exc).lower() for p in _LIMIT_PHRASES):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False

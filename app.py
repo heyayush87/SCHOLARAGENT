@@ -7,13 +7,27 @@ from pathlib import Path
 import streamlit as st
 from langchain_core.messages import AIMessageChunk, HumanMessage
 
-from backend.llm import get_llm, text_of
+from backend.llm import get_llm, is_limit_error, text_of
 from backend.btw_handler import handle_btw
 from backend.paper_loader import load_arxiv, load_document, load_webpage
 from backend.rag_graph import build_graph
 from backend.vector_store import add_paper, list_papers
 
 st.set_page_config(page_title="SCHOLARAGENT", page_icon="📚", layout="centered")
+
+
+@st.dialog("⚠️ Demo limit reached")
+def limit_dialog() -> None:
+    st.write(
+        "This live demo runs on the author's personal, limited-budget API keys, and the "
+        "usage limit has been reached (or the provider is rate-limiting requests)."
+    )
+    st.write(
+        "Nothing is wrong with your question. Please try again in a little while. "
+        "The README has screenshots and the code if you'd like to see how it works."
+    )
+    if st.button("Close"):
+        st.rerun()
 
 
 @st.cache_resource
@@ -324,10 +338,16 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
             else:
                 placeholder = st.empty()
                 response_text = ""
-                for chunk in handle_btw(query):
-                    response_text += chunk
-                    placeholder.markdown(response_text + "▌")
-                placeholder.markdown(response_text)
+                try:
+                    for chunk in handle_btw(query):
+                        response_text += chunk
+                        placeholder.markdown(response_text + "▌")
+                    placeholder.markdown(response_text)
+                except Exception as e:
+                    if not is_limit_error(e):
+                        raise
+                    placeholder.empty()
+                    limit_dialog()
             st.caption("Side channel — not saved to session history.")
 
     else:
@@ -364,29 +384,38 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
         config = {"configurable": {"thread_id": active_sid}}
 
         with st.chat_message("assistant"):
-            placeholder = st.empty()
-            response_text = ""
+            try:
+                placeholder = st.empty()
+                response_text = ""
 
-            for chunk, metadata in graph.stream(input_state, config, stream_mode="messages"):
-                if (
-                    metadata.get("langgraph_node") == "generate_answer"
-                    and isinstance(chunk, AIMessageChunk)  # skip the final full AIMessage, which would duplicate the streamed text
-                    and text_of(chunk.content)
-                ):
-                    response_text += text_of(chunk.content)
-                    placeholder.markdown(response_text + "▌")
+                for chunk, metadata in graph.stream(input_state, config, stream_mode="messages"):
+                    if (
+                        metadata.get("langgraph_node") == "generate_answer"
+                        and isinstance(chunk, AIMessageChunk)  # skip the final full AIMessage, which would duplicate the streamed text
+                        and text_of(chunk.content)
+                    ):
+                        response_text += text_of(chunk.content)
+                        placeholder.markdown(response_text + "▌")
 
-            if not response_text:
+                if not response_text:
+                    final_values = graph.get_state(config).values
+                    response_text = final_values.get("answer") or "No response generated."
+
+                placeholder.markdown(response_text)
+
                 final_values = graph.get_state(config).values
-                response_text = final_values.get("answer") or "No response generated."
+                state_snapshot = _serialize_state(final_values)
 
-            placeholder.markdown(response_text)
-
-            final_values = graph.get_state(config).values
-            state_snapshot = _serialize_state(final_values)
-
-            with st.expander(f"📊 Graph state · turn {current_turn}", expanded=False):
-                st.json(state_snapshot)
+                with st.expander(f"📊 Graph state · turn {current_turn}", expanded=False):
+                    st.json(state_snapshot)
+            except Exception as e:
+                if not is_limit_error(e):
+                    raise
+                placeholder.empty()
+                st.session_state.chats[active_sid].pop()  # drop the unanswered question
+                st.session_state.turns[active_sid] -= 1
+                limit_dialog()
+                st.stop()
 
         st.session_state.chats[active_sid].append(
             {
