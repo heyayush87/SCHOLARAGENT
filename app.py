@@ -11,7 +11,7 @@ from backend.llm import get_llm, limit_info, text_of
 from backend.btw_handler import handle_btw
 from backend.paper_loader import load_arxiv, load_document, load_webpage
 from backend.rag_graph import build_graph
-from backend.vector_store import add_paper, list_papers
+from backend.vector_store import add_paper, delete_session_papers, list_papers
 
 st.set_page_config(page_title="SCHOLARAGENT", page_icon="📚", layout="centered")
 
@@ -52,6 +52,17 @@ def describe_load_error(e: Exception) -> str:
     if "connection" in str(e).lower() or "name or service" in str(e).lower() or "getaddrinfo" in str(e).lower():
         return "the address could not be reached"
     return str(e)[:200] or type(e).__name__
+
+
+@st.dialog("Delete this session?")
+def delete_session_dialog(session_id: str, name: str) -> None:
+    st.write(f"**{name}** and all its uploaded documents and chat history will be permanently deleted.")
+    c1, c2 = st.columns(2)
+    if c2.button("Delete", type="primary", use_container_width=True):
+        delete_session(session_id)
+        st.rerun()
+    if c1.button("Cancel", use_container_width=True):
+        st.rerun()
 
 
 @st.cache_resource
@@ -142,6 +153,30 @@ def create_session() -> str:
     return sid
 
 
+def delete_session(session_id: str) -> None:
+    errors = []
+    for cleanup in (
+        lambda: delete_session_papers(session_id),
+        lambda: graph.checkpointer.delete_thread(session_id),
+    ):
+        try:
+            cleanup()
+        except Exception as e:  # still remove the session from the list
+            errors.append(str(e))
+    st.session_state.sessions_meta.pop(session_id, None)
+    st.session_state.chats.pop(session_id, None)
+    st.session_state.turns.pop(session_id, None)
+    save_sessions(st.session_state.sessions_meta)
+    if st.session_state.active_session_id == session_id:
+        remaining = st.session_state.sessions_meta.values()
+        if remaining:
+            switch_session(max(remaining, key=lambda s: s["created_at"])["id"])
+        else:
+            st.session_state.active_session_id = create_session()
+    if errors:
+        report_problem("The session was removed, but cleanup was incomplete: " + "; ".join(errors)[:200])
+
+
 def load_session_chats(session_id: str) -> list[dict]:
     config = {"configurable": {"thread_id": session_id}}
     try:
@@ -213,7 +248,8 @@ with st.sidebar:
         sid = session["id"]
         is_active = sid == st.session_state.active_session_id
         btn_type = "primary" if is_active else "secondary"
-        if st.button(
+        name_col, del_col = st.columns([5, 1], vertical_alignment="center")
+        if name_col.button(
             session["name"],
             key=f"sess_{sid}",
             use_container_width=True,
@@ -222,6 +258,8 @@ with st.sidebar:
             if not is_active:
                 switch_session(sid)
                 st.rerun()
+        if del_col.button("🗑", key=f"del_{sid}", help="Delete this session"):
+            delete_session_dialog(sid, session["name"])
 
     st.divider()
     st.markdown("## 📄 Documents")

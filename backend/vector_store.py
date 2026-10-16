@@ -60,6 +60,12 @@ def add_paper(docs: list[Document], session_id: str) -> None:
     get_vectorstore(session_id).add_documents(docs)
 
 
+def delete_session_papers(session_id: str) -> None:
+    name = get_collection_name(session_id)
+    if qdrant_client.collection_exists(name):
+        qdrant_client.delete_collection(name)
+
+
 def list_papers(session_id: str) -> list[str]:
     collection_name = get_collection_name(session_id)
     if not qdrant_client.collection_exists(collection_name):
