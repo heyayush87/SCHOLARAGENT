@@ -35,13 +35,19 @@ SCHOLARAGENT is a Retrieval-Augmented Generation (RAG) application built with La
 | **Multiple Paper Sources** | Load papers via file upload (PDF, TXT, MD), web URL, or ArXiv ID/title search |
 | **Graph State Inspector** | Each assistant turn exposes an expandable JSON view of the LangGraph state for debugging |
 | **Streaming Responses** | Assistant responses stream token-by-token with a cursor animation |
+| **Local Embeddings** | Documents are embedded on the server with FastEmbed (`BAAI/bge-small-en-v1.5`, 384-dim) — no embedding API key, no per-use cost, no embedding rate limits |
+| **Per-visitor Sessions** | Each visitor gets a random ID (kept in the URL as `?u=...`) and only ever sees their own sessions. Refreshing or bookmarking the URL brings them back |
+| **Delete Sessions** | A 🗑 button next to each session (with a confirmation popup) permanently deletes its chat history and uploaded documents |
+| **Demo Limit Popup** | If Claude, Tavily or LangSmith hits a rate limit, usage quota or rejected key, a popup names the provider and the reason instead of crashing the app |
+| **Input Error Popups** | Clear popups for missing files, empty or invalid URLs, pages that return errors (e.g. 404), and ArXiv IDs/titles that can't be found |
+| **LangSmith Tracing** | Every LangChain/LangGraph call is traced to the `SCHOLARAGENT` project when a LangSmith key is configured |
 
 ---
 
 ## How to Use
 
 ### 1. Start a session
-Launch the app and a default session is created automatically. Use **New Chat** in the sidebar to start additional sessions.
+Launch the app and a default session is created automatically. Use **New Chat** in the sidebar to start additional sessions. The app adds `?u=<your-id>` to the URL — keep or bookmark it to get your sessions back; other visitors cannot see them. Delete a session with the 🗑 button next to its name.
 
 ### 2. Upload papers
 In the sidebar, choose one of three loading methods:
@@ -49,7 +55,9 @@ In the sidebar, choose one of three loading methods:
 - **Web URL** — paste one or more URLs (one per line)
 - **ArXiv** — enter a paper title or ArXiv ID (e.g. `2303.08774`)
 
-Loaded papers are listed under "Loaded Papers" in the sidebar.
+Loaded papers are listed under "Loaded Documents" in the sidebar. If a file, URL or ArXiv entry can't be loaded, a popup explains why.
+
+If the demo's API budget is used up, a popup names which provider hit its limit; try again later.
 
 ### 3. Ask questions
 Type in the chat input. Example queries:
@@ -103,10 +111,12 @@ All keys are loaded from a `.env` file in the project root via `python-dotenv`.
 | Variable | Purpose | Where to Get It |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | LLM inference (Claude Sonnet 5.5 for the RAG graph, Claude Haiku 5.5 for side tasks) | [console.anthropic.com](https://console.anthropic.com) |
-| `LANGSMITH_API_KEY` | *(optional)* LangSmith tracing of every LangChain/LangGraph call | [smith.langchain.com](https://smith.langchain.com) |
+| `LANGSMITH_API_KEY` | *(optional)* LangSmith tracing of every LangChain/LangGraph call (the legacy name `LANGCHAIN_API_KEY` is also accepted) | [smith.langchain.com](https://smith.langchain.com) |
 | `TAVILY_API_KEY` | Web search for current developments and claim verification | [tavily.com](https://tavily.com) |
 | `QDRANT_URL` | Qdrant Cloud endpoint for the vector store | [cloud.qdrant.io](https://cloud.qdrant.io) |
 | `QDRANT_API_KEY` | Authentication for Qdrant Cloud | [cloud.qdrant.io](https://cloud.qdrant.io) |
+
+No embedding key is needed: embeddings are computed locally with FastEmbed (the model downloads on first run).
 
 `.env` file format:
 ```env
@@ -126,8 +136,9 @@ app.py (Streamlit UI)
 │
 ├── backend/rag_graph.py       — LangGraph RAG workflow (router → retrieve/verify/direct → answer)
 ├── backend/btw_handler.py     — Off-topic /btw handler (streaming, not stored in history)
-├── backend/vector_store.py    — Qdrant Cloud vector store with cached embeddings
+├── backend/vector_store.py    — Qdrant Cloud vector store with local, cached embeddings
 ├── backend/paper_loader.py    — Multi-source paper loader (PDF, TXT, MD, URL, ArXiv)
+├── backend/llm.py             — Model config, local embeddings, LangSmith setup, API-limit detection
 └── backend/models.py          — Pydantic models for routing and structured LLM outputs
 ```
 
@@ -156,10 +167,12 @@ User Query
 | Optimization | Details |
 |---|---|
 | **Embedding cache** | `CacheBackedEmbeddings` writes to `./embedding_cache/` so identical text is never re-embedded across sessions — reduces embedding compute and latency |
-| **Session isolation** | Each session gets its own Qdrant collection (`scholaragent_{session_id}`) and a separate LangGraph SQLite checkpointer thread — prevents cross-session data leakage |
+| **Session isolation** | Each session gets its own Qdrant collection (`scholaragent_bge_{session_id}`) and a separate LangGraph SQLite checkpointer thread, and sessions are filtered by a per-visitor ID — prevents cross-session and cross-visitor data leakage |
+| **Safe session saves** | Saving merges only the current visitor's sessions into `sessions.json`, so concurrent visitors never overwrite each other |
+| **Graceful limit handling** | API rate-limit / quota / key errors are detected and shown as a popup naming the provider, so a budget-limited public demo fails clearly instead of with a traceback |
 | **Graph caching** | The LangGraph graph is built once with `@st.cache_resource` and reused across all Streamlit reruns |
 | **Streaming responses** | `graph.stream()` is used with message mode so responses appear token-by-token rather than waiting for the full generation |
-| **Session persistence** | `sessions.json` persists session metadata; SQLite stores full conversation state — app restarts restore the previous session seamlessly |
+| **Session persistence** | `sessions.json` persists session metadata; SQLite stores full conversation state — app restarts restore the previous session seamlessly (on Streamlit Cloud the disk resets when the app restarts, so sessions there are temporary) |
 | **Temp file cleanup** | Uploaded files are written to a temp path, processed, then deleted regardless of success or failure |
 | **Async evaluation** | The evaluation pipeline uses throttled concurrency (3 workers, 5 s throttle) to stay within API rate limits |
 | **ArXiv reliability** | Claim verification uses two targeted Tavily searches (general web + `site:arxiv.org`) instead of the `arxiv` Python library, which had reliability issues |
@@ -174,6 +187,7 @@ User Query
 | **Chunk size 1000 / overlap 200** | Balances retrieval precision (smaller = more focused) against context preservation across chunk boundaries. The 200-char overlap ensures sentences split across chunks are still retrievable |
 | **Tavily max 3 results for `/btw`** | Keeps the context window manageable for side-channel queries that are intentionally lightweight and unsaved |
 | **`/btw` exchanges not stored** | These are deliberately out-of-context questions. Storing them would pollute session history and confuse the LLM's understanding of the paper-focused conversation |
+| **Local embeddings (bge-small)** | Keeps the public demo free of embedding bills and rate limits. The trade-off is slightly lower retrieval quality than a hosted model like Voyage, and a slower first request while the model downloads |
 | **Session-scoped Qdrant collections** | Prevents papers from one session leaking into another. Each collection is namespaced by session UUID |
 | **Claim verification uses two searches** | A general web search catches blog posts and news; an `arxiv.org`-targeted search catches academic superseding work. One search alone misses one of these two important source types |
 | **`k=4` default retrieval chunks** | Balances context richness against prompt length. Too few chunks miss relevant content; too many dilute focus and increase cost |
