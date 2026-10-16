@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import uuid
 from datetime import datetime
@@ -74,15 +75,33 @@ SESSIONS_FILE = Path("sessions.json")
 _rename_llm = get_llm(fast=True)
 
 
-def load_sessions() -> dict:
+def _read_all_sessions() -> dict:
     try:
         return json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
+def get_visitor_id() -> str:
+    """Per-visitor ID kept in the URL (?u=...) so a refresh or bookmark brings back the same sessions."""
+    uid = st.query_params.get("u", "")
+    if not re.fullmatch(r"[0-9a-f]{32}", uid):
+        uid = st.session_state.get("visitor_id") or uuid.uuid4().hex
+        st.query_params["u"] = uid
+    st.session_state.visitor_id = uid
+    return uid
+
+
+def load_sessions(owner: str) -> dict:
+    return {sid: m for sid, m in _read_all_sessions().items() if m.get("owner") == owner}
+
+
 def save_sessions(sessions_meta: dict) -> None:
-    SESSIONS_FILE.write_text(json.dumps(sessions_meta, indent=2), encoding="utf-8")
+    """Merge this visitor's sessions into the shared file without touching anyone else's."""
+    owner = st.session_state.visitor_id
+    all_sessions = {sid: m for sid, m in _read_all_sessions().items() if m.get("owner") != owner}
+    all_sessions.update(sessions_meta)
+    SESSIONS_FILE.write_text(json.dumps(all_sessions, indent=2), encoding="utf-8")
 
 
 def _serialize_state(values: dict) -> dict:
@@ -143,6 +162,7 @@ def create_session() -> str:
     sid = str(uuid.uuid4())
     st.session_state.sessions_meta[sid] = {
         "id": sid,
+        "owner": st.session_state.visitor_id,
         "name": "New Session",
         "created_at": datetime.now().isoformat(),
         "is_named": False,
@@ -210,8 +230,12 @@ def switch_session(session_id: str) -> None:
 graph = get_graph()
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────────
-if "sessions_meta" not in st.session_state:
-    st.session_state.sessions_meta = load_sessions()
+visitor_id = get_visitor_id()
+if st.session_state.get("meta_owner") != visitor_id:  # first load, or the URL's visitor ID changed
+    st.session_state.sessions_meta = load_sessions(visitor_id)
+    st.session_state.meta_owner = visitor_id
+    st.session_state.chats, st.session_state.turns = {}, {}
+    st.session_state.pop("active_session_id", None)
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "turns" not in st.session_state:
