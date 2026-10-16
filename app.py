@@ -7,7 +7,7 @@ from pathlib import Path
 import streamlit as st
 from langchain_core.messages import AIMessageChunk, HumanMessage
 
-from backend.llm import get_llm, is_limit_error, text_of
+from backend.llm import get_llm, limit_info, text_of
 from backend.btw_handler import handle_btw
 from backend.paper_loader import load_arxiv, load_document, load_webpage
 from backend.rag_graph import build_graph
@@ -17,13 +17,11 @@ st.set_page_config(page_title="SCHOLARAGENT", page_icon="📚", layout="centered
 
 
 @st.dialog("⚠️ Demo limit reached")
-def limit_dialog() -> None:
+def limit_dialog(provider: str, reason: str) -> None:
+    st.write(f"**{provider}** stopped this request: {reason}.")
     st.write(
-        "This live demo runs on the author's personal, limited-budget API keys, and the "
-        "usage limit has been reached (or the provider is rate-limiting requests)."
-    )
-    st.write(
-        "Nothing is wrong with your question. Please try again in a little while. "
+        "This live demo runs on the author's personal, limited-budget API keys, so this isn't "
+        "a problem with your question. Please try again in a little while. "
         "The README has screenshots and the code if you'd like to see how it works."
     )
     if st.button("Close"):
@@ -344,10 +342,11 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
                         placeholder.markdown(response_text + "▌")
                     placeholder.markdown(response_text)
                 except Exception as e:
-                    if not is_limit_error(e):
+                    info = limit_info(e)
+                    if not info:
                         raise
                     placeholder.empty()
-                    limit_dialog()
+                    limit_dialog(*info)
             st.caption("Side channel — not saved to session history.")
 
     else:
@@ -409,12 +408,13 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
                 with st.expander(f"📊 Graph state · turn {current_turn}", expanded=False):
                     st.json(state_snapshot)
             except Exception as e:
-                if not is_limit_error(e):
+                info = limit_info(e)
+                if not info:
                     raise
                 placeholder.empty()
                 st.session_state.chats[active_sid].pop()  # drop the unanswered question
                 st.session_state.turns[active_sid] -= 1
-                limit_dialog()
+                limit_dialog(*info)
                 st.stop()
 
         st.session_state.chats[active_sid].append(

@@ -41,21 +41,27 @@ def text_of(content) -> str:
     return str(content or "")
 
 
-_LIMIT_NAMES = {
-    "RateLimitError", "UsageLimitExceededError", "TavilyKeylessLimitError",
-    "AuthenticationError", "PermissionDeniedError", "InvalidAPIKeyError", "ForbiddenError",
-}
-_LIMIT_PHRASES = ("rate limit", "credit balance", "quota", "usage limit", "billing", "exceeds your plan")
+_KEY_ERRORS = {"AuthenticationError", "PermissionDeniedError", "InvalidAPIKeyError", "ForbiddenError", "MissingAPIKeyError"}
+_QUOTA_ERRORS = {"UsageLimitExceededError", "TavilyKeylessLimitError"}
+_QUOTA_PHRASES = ("credit balance", "quota", "usage limit", "billing", "exceeds your plan")
+_PROVIDERS = {"anthropic": "Anthropic (Claude)", "tavily": "Tavily (web search)", "langsmith": "LangSmith"}
 
 
-def is_limit_error(exc: BaseException) -> bool:
-    """True if exc (or anything in its cause chain) means an API budget/rate limit was hit or a key was rejected."""
+def limit_info(exc: BaseException) -> tuple[str, str] | None:
+    """(provider, reason) if exc, or anything in its cause chain, is an API limit / key problem; else None."""
     seen = set()
     while exc is not None and id(exc) not in seen:
         seen.add(id(exc))
-        if type(exc).__name__ in _LIMIT_NAMES or getattr(exc, "status_code", None) in (402, 429):
-            return True
-        if any(p in str(exc).lower() for p in _LIMIT_PHRASES):
-            return True
+        name, status, msg = type(exc).__name__, getattr(exc, "status_code", None), str(exc).lower()
+        reason = None
+        if name in _KEY_ERRORS:
+            reason = "the API key was rejected (invalid, disabled or missing)"
+        elif name in _QUOTA_ERRORS or status == 402 or any(p in msg for p in _QUOTA_PHRASES):
+            reason = "the credit / usage quota has been used up"
+        elif name == "RateLimitError" or status == 429 or "rate limit" in msg:
+            reason = "the rate limit was exceeded"
+        if reason:
+            root = type(exc).__module__.split(".")[0]
+            return _PROVIDERS.get(root, "an external API"), reason
         exc = exc.__cause__ or exc.__context__
-    return False
+    return None
