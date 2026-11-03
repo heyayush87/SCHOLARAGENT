@@ -444,7 +444,7 @@ for msg in st.session_state.chats.get(active_sid, []):
         st.markdown(msg["content"])
         if msg["role"] == "assistant":
             with st.expander(f"📊 Graph state · turn {msg['turn']}", expanded=False):
-                st.json(msg["graph_state"])
+                st.code(json.dumps(msg["graph_state"], indent=2, default=str), language="json")
 
 # ── Chat input ─────────────────────────────────────────────────────────────────
 if prompt := st.chat_input("Ask about your papers, verify a claim, or search the web…"):
@@ -530,7 +530,7 @@ if prompt := st.chat_input("Ask about your papers, verify a claim, or search the
                 state_snapshot = _serialize_state(final_values)
 
                 with st.expander(f"📊 Graph state · turn {current_turn}", expanded=False):
-                    st.json(state_snapshot)
+                    st.code(json.dumps(state_snapshot, indent=2, default=str), language="json")
             except Exception as e:
                 placeholder.empty()
                 st.session_state.chats[active_sid].pop()  # drop the unanswered question
