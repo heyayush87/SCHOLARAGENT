@@ -38,7 +38,7 @@ SCHOLARAGENT is a Retrieval-Augmented Generation (RAG) application built with La
 | **Local Embeddings** | Documents are embedded on the server with FastEmbed (`BAAI/bge-small-en-v1.5`, 384-dim) — no embedding API key, no per-use cost, no embedding rate limits |
 | **Per-visitor Sessions** | Each visitor gets a random ID (kept in the URL as `?u=...`) and only ever sees their own sessions. Refreshing or bookmarking the URL brings them back |
 | **Delete Sessions** | A 🗑 button next to each session (with a confirmation popup) permanently deletes its chat history and uploaded documents |
-| **Usage Limits** | A shared daily question cap (default 100/day across all visitors), a per-visitor cap (default 15/hour), a 2,000-character question limit and a per-call output-token cap keep the public demo inside its API budget |
+| **Usage Limits** | Each visitor gets 4 questions per day, with a shared cap of 20/day across all visitors,, a 2,000-character question limit and a per-call output-token cap keep the public demo inside its API budget |
 | **Demo Limit Popup** | If OpenAI, Tavily or LangSmith hits a rate limit, usage quota or rejected key, a popup names the provider and the reason instead of crashing the app |
 | **Input Error Popups** | Clear popups for missing files, empty or invalid URLs, pages that return errors (e.g. 404), and ArXiv IDs/titles that can't be found |
 | **LangSmith Tracing** | Every LangChain/LangGraph call is traced to the `SCHOLARAGENT` project when a LangSmith key is configured |
@@ -121,8 +121,8 @@ Optional usage limits (defaults shown) can be set in `.env` as well:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DAILY_QUESTION_LIMIT` | `100` | Questions per UTC day, all visitors combined |
-| `VISITOR_HOURLY_LIMIT` | `15` | Questions per visitor in any rolling hour |
+| `DAILY_QUESTION_LIMIT` | `20` | Questions per UTC day, all visitors combined |
+| `VISITOR_DAILY_LIMIT` | `4` | Questions per visitor per UTC day |
 | `MAX_QUESTION_CHARS` | `2000` | Longest question accepted |
 | `MAX_OUTPUT_TOKENS` | `6000` | Output-token cap per model call (includes hidden reasoning) |
 | `OPENAI_REASONING_EFFORT` | `low` | Reasoning effort for GPT-5 / o-series models |
