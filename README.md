@@ -38,7 +38,8 @@ SCHOLARAGENT is a Retrieval-Augmented Generation (RAG) application built with La
 | **Local Embeddings** | Documents are embedded on the server with FastEmbed (`BAAI/bge-small-en-v1.5`, 384-dim) — no embedding API key, no per-use cost, no embedding rate limits |
 | **Per-visitor Sessions** | Each visitor gets a random ID (kept in the URL as `?u=...`) and only ever sees their own sessions. Refreshing or bookmarking the URL brings them back |
 | **Delete Sessions** | A 🗑 button next to each session (with a confirmation popup) permanently deletes its chat history and uploaded documents |
-| **Demo Limit Popup** | If Claude, Tavily or LangSmith hits a rate limit, usage quota or rejected key, a popup names the provider and the reason instead of crashing the app |
+| **Usage Limits** | A shared daily question cap (default 100/day across all visitors), a per-visitor cap (default 15/hour), a 2,000-character question limit and a per-call output-token cap keep the public demo inside its API budget |
+| **Demo Limit Popup** | If OpenAI, Tavily or LangSmith hits a rate limit, usage quota or rejected key, a popup names the provider and the reason instead of crashing the app |
 | **Input Error Popups** | Clear popups for missing files, empty or invalid URLs, pages that return errors (e.g. 404), and ArXiv IDs/titles that can't be found |
 | **LangSmith Tracing** | Every LangChain/LangGraph call is traced to the `SCHOLARAGENT` project when a LangSmith key is configured |
 
@@ -110,17 +111,27 @@ All keys are loaded from a `.env` file in the project root via `python-dotenv`.
 
 | Variable | Purpose | Where to Get It |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | LLM inference (Claude Sonnet 5.5 for the RAG graph, Claude Haiku 5.5 for side tasks) | [console.anthropic.com](https://console.anthropic.com) |
+| `OPENAI_API_KEY` | LLM inference (GPT-5 mini for both the RAG graph and side tasks; override with `OPENAI_MAIN_MODEL` / `OPENAI_FAST_MODEL`) | [platform.openai.com](https://platform.openai.com/api-keys) |
 | `LANGSMITH_API_KEY` | *(optional)* LangSmith tracing of every LangChain/LangGraph call (the legacy name `LANGCHAIN_API_KEY` is also accepted) | [smith.langchain.com](https://smith.langchain.com) |
 | `TAVILY_API_KEY` | Web search for current developments and claim verification | [tavily.com](https://tavily.com) |
 | `QDRANT_URL` | Qdrant Cloud endpoint for the vector store | [cloud.qdrant.io](https://cloud.qdrant.io) |
 | `QDRANT_API_KEY` | Authentication for Qdrant Cloud | [cloud.qdrant.io](https://cloud.qdrant.io) |
 
+Optional usage limits (defaults shown) can be set in `.env` as well:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DAILY_QUESTION_LIMIT` | `100` | Questions per UTC day, all visitors combined |
+| `VISITOR_HOURLY_LIMIT` | `15` | Questions per visitor in any rolling hour |
+| `MAX_QUESTION_CHARS` | `2000` | Longest question accepted |
+| `MAX_OUTPUT_TOKENS` | `6000` | Output-token cap per model call (includes hidden reasoning) |
+| `OPENAI_REASONING_EFFORT` | `low` | Reasoning effort for GPT-5 / o-series models |
+
 No embedding key is needed: embeddings are computed locally with FastEmbed (the model downloads on first run).
 
 `.env` file format:
 ```env
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 LANGSMITH_API_KEY=lsv2_...   # optional; enables tracing (project: SCHOLARAGENT)
 TAVILY_API_KEY=tvly-...
 QDRANT_URL=https://your-cluster.qdrant.io

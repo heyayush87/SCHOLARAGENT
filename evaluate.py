@@ -18,7 +18,7 @@ from deepeval.metrics import (
     ContextualRelevancyMetric,
     FaithfulnessMetric,
 )
-from deepeval.models import AnthropicModel
+from deepeval.models import GPTModel
 from deepeval.synthesizer import Synthesizer
 from deepeval.synthesizer.config import ContextConstructionConfig
 from deepeval.test_case import LLMTestCase
@@ -38,7 +38,7 @@ METRIC_THRESHOLD    = 0.7
 
 
 def generate_goldens() -> list[dict]:
-    synthesizer = Synthesizer(model=AnthropicModel(model=MAIN_MODEL))
+    synthesizer = Synthesizer(model=GPTModel(model=MAIN_MODEL))
     goldens = synthesizer.generate_goldens_from_docs(
         document_paths=[PDF_PATH],
         include_expected_output=True,
@@ -84,7 +84,7 @@ def main() -> None:
     docs = load_document(PDF_PATH)
     graph = build_graph(db_path="eval_checkpoints.db")
 
-    judge = AnthropicModel(model=MAIN_MODEL)
+    judge = GPTModel(model=MAIN_MODEL)
     metrics = [
         ContextualPrecisionMetric(threshold=METRIC_THRESHOLD, model=judge),
         ContextualRecallMetric(threshold=METRIC_THRESHOLD, model=judge),

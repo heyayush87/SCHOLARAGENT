@@ -22,3 +22,6 @@ embedding_cache/
 # Local-only files
 docs/
 .deepeval/
+
+.vibe-wise/
+graphify-out/

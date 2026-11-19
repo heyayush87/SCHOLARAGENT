@@ -1,8 +1,8 @@
-"""Central model + tracing configuration (Anthropic for chat, local FastEmbed for embeddings, LangSmith for tracing)."""
+"""Central model + tracing configuration (OpenAI for chat, local FastEmbed for embeddings, LangSmith for tracing)."""
 import os
 
 from dotenv import load_dotenv
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_community.embeddings import FastEmbedEmbeddings
 
 load_dotenv()
@@ -16,14 +16,20 @@ if _langsmith_key:
     os.environ.setdefault("LANGSMITH_PROJECT", "SCHOLARAGENT")
 
 # ── Models ────────────────────────────────────────────────────────────────────
-MAIN_MODEL = os.getenv("ANTHROPIC_MAIN_MODEL", "claude-sonnet-5-5")   # RAG graph: routing, answering, verification
-FAST_MODEL = os.getenv("ANTHROPIC_FAST_MODEL", "claude-haiku-5-5")    # side tasks: /btw, session titles
+MAIN_MODEL = os.getenv("OPENAI_MAIN_MODEL", "gpt-5-mini")   # RAG graph: routing, answering, verification
+FAST_MODEL = os.getenv("OPENAI_FAST_MODEL", "gpt-5-mini")    # side tasks: /btw, session titles
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")  # runs locally (ONNX): no API key, no per-use cost
 EMBEDDING_DIM = 384  # bge-small-en-v1.5
 
 
-def get_llm(fast: bool = False) -> ChatAnthropic:
-    return ChatAnthropic(model=FAST_MODEL if fast else MAIN_MODEL, max_tokens=4096)
+MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "6000"))  # per call; reasoning models count hidden reasoning too
+REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "low")       # low keeps reasoning tokens (and cost) down
+
+
+def get_llm(fast: bool = False) -> ChatOpenAI:
+    model = FAST_MODEL if fast else MAIN_MODEL
+    extra = {"reasoning_effort": REASONING_EFFORT} if model.startswith(("gpt-5", "o")) else {}  # gpt-4o etc. reject it
+    return ChatOpenAI(model=model, max_tokens=MAX_OUTPUT_TOKENS, **extra)
 
 
 def get_embeddings() -> FastEmbedEmbeddings:
@@ -31,7 +37,7 @@ def get_embeddings() -> FastEmbedEmbeddings:
 
 
 def text_of(content) -> str:
-    """Claude returns content as a str or a list of blocks; flatten to plain text."""
+    """Chat models return content as a str or a list of blocks; flatten to plain text."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -46,7 +52,7 @@ def text_of(content) -> str:
 _KEY_ERRORS = {"AuthenticationError", "PermissionDeniedError", "InvalidAPIKeyError", "ForbiddenError", "MissingAPIKeyError"}
 _QUOTA_ERRORS = {"UsageLimitExceededError", "TavilyKeylessLimitError"}
 _QUOTA_PHRASES = ("credit balance", "quota", "usage limit", "billing", "exceeds your plan")
-_PROVIDERS = {"anthropic": "Anthropic (Claude)", "tavily": "Tavily (web search)", "langsmith": "LangSmith"}
+_PROVIDERS = {"openai": "OpenAI (ChatGPT)", "tavily": "Tavily (web search)", "langsmith": "LangSmith"}
 
 
 def limit_info(exc: BaseException) -> tuple[str, str] | None:

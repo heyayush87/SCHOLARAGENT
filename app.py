@@ -13,6 +13,7 @@ from backend.llm import get_llm, limit_info, text_of
 from backend.btw_handler import handle_btw
 from backend.paper_loader import load_arxiv, load_document, load_webpage
 from backend.rag_graph import build_graph
+from backend.usage_limits import MAX_QUESTION_CHARS, try_consume
 from backend.vector_store import add_paper, delete_session_papers, list_papers
 
 st.set_page_config(page_title="SCHOLARAGENT", page_icon="📚", layout="centered")
@@ -29,6 +30,25 @@ def limit_dialog(provider: str, reason: str) -> None:
     )
     if st.button("Close"):
         st.rerun()
+
+
+@st.dialog("⏳ Question limit reached")
+def usage_limit_dialog(reason: str) -> None:
+    st.write(reason)
+    st.caption("This live demo runs on the author's limited-budget API keys, so questions are capped to keep it available for everyone.")
+    if st.button("Close"):
+        st.rerun()
+
+
+def limit_key() -> str:
+    """Who a per-visitor limit applies to: the client IP when the host exposes it (a new URL or private window
+    doesn't reset that), otherwise the URL visitor ID."""
+    try:
+        forwarded = st.context.headers.get("X-Forwarded-For", "")
+        ip = forwarded.split(",")[0].strip() or st.context.ip_address
+    except Exception:
+        ip = None
+    return f"ip:{ip}" if ip else f"visitor:{st.session_state.visitor_id}"
 
 
 @st.dialog("⚠️ Something went wrong")
@@ -447,7 +467,15 @@ for msg in st.session_state.chats.get(active_sid, []):
                 st.code(json.dumps(msg["graph_state"], indent=2, default=str), language="json")
 
 # ── Chat input ─────────────────────────────────────────────────────────────────
-if prompt := st.chat_input("Ask about your papers, verify a claim, or search the web…"):
+prompt = st.chat_input("Ask about your papers, verify a claim, or search the web…", max_chars=MAX_QUESTION_CHARS)
+if prompt and prompt.strip() and len(prompt) <= MAX_QUESTION_CHARS and (blocked := try_consume(limit_key())):
+    usage_limit_dialog(blocked)
+    prompt = None
+if prompt and len(prompt) > MAX_QUESTION_CHARS:  # chat_input enforces this in the browser; this guards direct requests
+    usage_limit_dialog(f"Questions are limited to {MAX_QUESTION_CHARS} characters.")
+    prompt = None
+
+if prompt:
     is_btw = prompt.strip().lower().startswith("/btw")
 
     if is_btw:
